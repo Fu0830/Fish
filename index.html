@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>小票机 · 结单小票生成器</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f7b8cd'/%3E%3Cpath d='M9 6h14v20l-2.4-1.8-2.4 1.8-2.4-1.8-2.4 1.8-2.4-1.8L9 26z' fill='%23fffdfb'/%3E%3Cpath d='M12 11h8M12 15h8M12 19h5' stroke='%23c98aa8' stroke-width='1.4'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f7b8cd">
 <link rel="preconnect" href="https://miaoda.feishu.cn">
 <link rel="preconnect" href="https://sf3-scmcdn-cn.feishucdn.com" crossorigin>
 <link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Parisienne&amp;family=Noto+Serif+SC:wght@400;600&amp;display=swap">
@@ -437,6 +440,10 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
 [data-night="on"] .char-btn[aria-pressed="true"]{ background: hsl(var(--ch-hue) 40% 24%); box-shadow: 0 0 0 2px hsl(var(--ch-hue) 70% 62% / .4); }
 [data-night="on"] .char-btn[aria-pressed="true"] span{ color: hsl(var(--ch-hue) 60% 84%); }
 .char-hint{ margin-top: 8px; font-size: 11px; line-height: 1.6; color: var(--ui-ink-2); }
+.avatar-row{ display: flex; align-items: center; gap: 9px; margin-top: 10px; flex-wrap: wrap; }
+.avatar-row .btn{ height: 38px; padding: 0 14px; font-size: 12.5px; }
+.avatar-preview{ width: 46px; height: 46px; flex: none; border-radius: 12px; overflow: hidden; background: var(--ui-field); border: 1px solid var(--ui-line); display: flex; align-items: center; justify-content: center; }
+.avatar-preview img{ width: 100%; height: 100%; object-fit: cover; }
 
 /* ---------- 票据本体 ---------- */
 .slip{
@@ -776,7 +783,13 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
       <div class="panel-title"><span class="dot"></span>角色主题<small>CHARACTER</small></div>
       <div class="panel-body">
         <div class="char-grid" id="charGrid"></div>
-        <p class="char-hint">换角色会连配色一起换，色相滑杆仍可自由微调</p>
+        <div class="avatar-row">
+          <div class="avatar-preview" id="avatarPreview" hidden><img id="avatarPreviewImg" alt="自定义头像"></div>
+          <button type="button" class="btn btn-ghost" id="avatarUploadBtn">上传自定义头像</button>
+          <button type="button" class="btn btn-ghost" id="avatarClearBtn" hidden>恢复默认角色</button>
+          <input type="file" id="avatarFile" accept="image/*" hidden>
+        </div>
+        <p class="char-hint">换角色会连配色一起换，色相滑杆仍可自由微调；上传头像后票面角色图将替换为你的图片，配色仍按所选角色。</p>
       </div>
     </section>
 
@@ -1112,7 +1125,11 @@ var X={signature:"GIF",version:"89a",trailer:59,extensionIntroducer:33,applicati
             '<em>' + esc(slogan()) + '</em>' +
           '</div>' +
         '</div>' +
-        '<div class="tk-hero" style="background-image:url(' + gingham() + ')"><img src="' + ch.img + '" style="height:' + ch.h + 'px" alt="' + esc(ch.name) + '"><p>' + esc(ch.name) + ' · CHARACTER</p></div>' +
+        '<div class="tk-hero" style="background-image:url(' + gingham() + ')">' +
+          (state.customAvatar
+            ? '<img src="' + state.customAvatar + '" style="height:' + ch.h + 'px;max-width:90%;border-radius:12px;" alt="自定义头像"><p>自定义头像</p>'
+            : '<img src="' + ch.img + '" style="height:' + ch.h + 'px" alt="' + esc(ch.name) + '"><p>' + esc(ch.name) + ' · CHARACTER</p>') +
+        '</div>' +
         '<div class="tk-time">' +
           '<span>' + tk.day + '</span><i></i>' +
           '<span>' + tk.min + '</span><i></i>' +
@@ -1229,6 +1246,7 @@ var X={signature:"GIF",version:"89a",trailer:59,extensionIntroducer:33,applicati
     /* 店名已固定，把旧存档里的旧店名迁到新店名 */
     if (m.clubCn === '星野游戏屋') m.clubCn = DEFAULTS.clubCn;
     if (m.clubEn === 'HOSHINO PLAYROOM') m.clubEn = DEFAULTS.clubEn;
+    if (m.customAvatar === undefined) m.customAvatar = '';
     if (!Array.isArray(m.items) || !m.items.length) {
       m.items = DEFAULTS.items.map(function (x) { return Object.assign({}, x); });
     } else {
@@ -1548,6 +1566,13 @@ var X={signature:"GIF",version:"89a",trailer:59,extensionIntroducer:33,applicati
   }
 
   /* ---------- 绑定 ---------- */
+  function refreshAvatarUI() {
+    var has = !!state.customAvatar;
+    $('#avatarPreview').hidden = !has;
+    $('#avatarClearBtn').hidden = !has;
+    if (has) $('#avatarPreviewImg').src = state.customAvatar;
+  }
+  /* ---------- 绑定 ---------- */
   function bind() {
     $('#items').addEventListener('input', function (e) {
       var card = e.target.closest('.item-card');
@@ -1602,6 +1627,43 @@ var X={signature:"GIF",version:"89a",trailer:59,extensionIntroducer:33,applicati
       state.hue = CHARS[state.character].hue;
       applyTheme(); syncForm(); renderSlip(); save();
       toast('已换成「' + CHARS[state.character].name + '」主题');
+    });
+
+    /* ---------- 自定义头像 ---------- */
+    function compressAvatar(file, done) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var max = 320;
+        var w = img.width, h = img.height;
+        if (w > max || h > max) {
+          var k = Math.min(max / w, max / h);
+          w = Math.round(w * k); h = Math.round(h * k);
+        }
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        done(cv.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); toast('图片读取失败，请换一张'); };
+      img.src = url;
+    }
+    $('#avatarUploadBtn').addEventListener('click', function () { $('#avatarFile').click(); });
+    $('#avatarFile').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      compressAvatar(f, function (dataUrl) {
+        state.customAvatar = dataUrl;
+        refreshAvatarUI(); renderSlip(); save();
+        toast('头像已更新');
+      });
+      e.target.value = '';
+    });
+    $('#avatarClearBtn').addEventListener('click', function () {
+      state.customAvatar = '';
+      refreshAvatarUI(); renderSlip(); save();
+      toast('已恢复默认角色');
     });
     $('#swatches').addEventListener('click', function (e) {
       var b = e.target.closest('.swatch');
@@ -1660,6 +1722,7 @@ var X={signature:"GIF",version:"89a",trailer:59,extensionIntroducer:33,applicati
     stampOn: true,
     stampText: '小鱼',
     character: 'kitty',
+    customAvatar: '',
     hue: 352,
     night: false
   };
@@ -1673,6 +1736,7 @@ var X={signature:"GIF",version:"89a",trailer:59,extensionIntroducer:33,applicati
   renderItems();
   renderSlip();
   bind();
+  refreshAvatarUI();
 })();
 </script>
 </body>
