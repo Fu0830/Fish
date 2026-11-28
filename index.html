@@ -2526,9 +2526,9 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     if (st === 'classic') {
       inner = fMeta + fBrand + fHeroClassic + fTime + fCols + fLines + fSum + fChips + fQuote;
     } else if (st === 'cream' || st === 'panel') {
-      inner = fBrand + fMeta + fCols + fLines + fHero + fLedger + fQuote;
+      inner = fBrand + fMeta + fTime + fCols + fLines + fHero + fLedger + fQuote;
     } else {
-      inner = fBrand + fMeta + fCols + fLines + fHero + fSum + fChips + fQuote;
+      inner = fBrand + fMeta + fTime + fCols + fLines + fHero + fSum + fChips + fQuote;
     }
 
     var barInner = st === 'pixel' ? '<div class="tk-winbtns"><i></i><i></i><i class="x"></i></div>' : '';
