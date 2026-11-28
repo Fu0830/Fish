@@ -301,10 +301,10 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
 .w-acts{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 
 /* 底部导航分栏 */
-.bottom-nav{ position:fixed; left:0; right:0; bottom:0; z-index:60; display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); background:var(--ui-card); border-top:1px solid var(--ui-line); }
-.bottom-nav button{ height:42px; border-radius:11px; border:1px solid var(--ui-line); background:transparent; color:var(--ui-ink-2); font-size:13px; letter-spacing:.12em; }
-.bottom-nav button.active{ border-color:var(--accent); background:var(--accent); color:#fff; }
-body{ padding-bottom:76px; }
+.top-nav{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 16px 10px; max-width:1180px; margin:0 auto; width:100%; box-sizing:border-box; }
+.top-nav button{ height:38px; border-radius:11px; border:1px solid var(--ui-line); background:transparent; color:var(--ui-ink-2); font-size:13px; letter-spacing:.12em; }
+.top-nav button.active{ border-color:var(--accent); background:var(--accent); color:#fff; }
+
 body[data-view="wallet"] #panelTicket, body[data-view="wallet"] #panelBlessing, body[data-view="wallet"] #stageCol{ display:none; }
 body[data-view="ticket"] #panelWallet{ display:none; }
 .field-row-inline{ display: flex; align-items: center; gap: 10px; }
@@ -1097,6 +1097,10 @@ body[data-view="ticket"] #panelWallet{ display:none; }
       <button class="night-btn" id="nightBtn" aria-pressed="false" type="button">夜间</button>
     </div>
   </div>
+  <nav class="top-nav" id="topNav">
+    <button type="button" id="navTicket" class="active">小票</button>
+    <button type="button" id="navWallet">钱包</button>
+  </nav>
 </header>
 
 <div class="wrap">
@@ -1351,10 +1355,6 @@ body[data-view="ticket"] #panelWallet{ display:none; }
   </div>
 </div>
 
-<nav class="bottom-nav" id="bottomNav">
-  <button type="button" id="navTicket" class="active">小票</button>
-  <button type="button" id="navWallet">钱包</button>
-</nav>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="save-sheet" id="saveSheet" hidden>
