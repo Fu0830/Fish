@@ -249,6 +249,12 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
 .role-seg button.active{
   border-color: var(--accent); background: var(--accent); color: #fff;
 }
+.card-pick{ display: flex; gap: 6px; align-items: center; }
+.card-pick select{ flex: 1; min-width: 0; height: 32px; border-radius: 9px;
+  border: 1px solid var(--ui-line); background: transparent; color: var(--ui-ink-2);
+  font-size: 12px; letter-spacing: .04em; padding: 0 8px; }
+.card-pick .btn-ghost{ flex: 0 0 auto; }
+.card-pick .btn-ghost.active{ border-color: var(--accent); background: var(--accent); color: #fff; }
 .add-item{
   width: 100%; height: 38px; border-radius: 10px;
   border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--ui-line));
@@ -1205,7 +1211,10 @@ body[data-view="ticket"] #panelWallet{ display:none; }
       <div class="panel-body">
         <div class="money-row">
           <span>记账账户<span class="hint">出票扣这里</span></span>
-          <div id="cardSegTicket" class="role-seg"></div>
+          <div class="card-pick">
+            <select id="cardSelTicket" class="control" aria-label="选择储蓄卡"></select>
+            <button type="button" id="cashBtnTicket" class="btn btn-ghost">散单</button>
+          </div>
         </div>
         <div class="money-row">
           <span>合计</span>
@@ -1241,7 +1250,10 @@ body[data-view="ticket"] #panelWallet{ display:none; }
       <div class="panel-body">
         <div class="money-row">
           <span>记账账户</span>
-          <div id="cardSeg" class="role-seg"></div>
+          <div class="card-pick">
+            <select id="cardSel" class="control" aria-label="选择储蓄卡"></select>
+            <button type="button" id="cashBtn" class="btn btn-ghost">散单</button>
+          </div>
         </div>
         <div class="money-row">
           <span>当前余额</span>
@@ -2391,8 +2403,8 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     return state.slogan || '按单结清 · 谢绝挂账';
   }
   function blessText() {
-    if (state.tail.trim()) return state.tail.trim();
     var n = state.name.trim() || '你';
+    if (state.tail.trim()) return state.tail.trim().replace(/\{\s*名字\s*\}|｛\s*名字\s*｝|\{\s*name\s*\}|｛\s*name\s*｝/gi, n);
     var c = state.clubCn.trim() || '这里';
     return '祝' + n + '在' + c + '玩得开心';
   }
@@ -2849,14 +2861,21 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     if (state.cashConsumptions.length > LEDGER_MAX) state.cashConsumptions = state.cashConsumptions.slice(-LEDGER_MAX);
   }
   function renderWallet() {
-    var btns = state.cards.map(function (c) {
-      var act = c.id === state.activeCardId ? ' active' : '';
-      return '<button type="button" data-card="' + esc(c.id) + '" class="' + act.trim() + '">' + esc(c.name) + ' ' + fmt(c.balance) + '</button>';
+    var cardOpts = state.cards.map(function (c) {
+      return '<option value="' + esc(c.id) + '">' + esc(c.name) + ' · ' + fmt(c.balance) + '</option>';
     });
-    var cashAct = state.activeCardId === CASH_ID ? ' active' : '';
-    btns.push('<button type="button" data-card="' + CASH_ID + '" class="' + cashAct.trim() + '">散单</button>');
-    ['#cardSeg', '#cardSegTicket'].forEach(function (id) {
-      var seg = $(id); if (seg) seg.innerHTML = btns.join('');
+    var cashActive = state.activeCardId === CASH_ID;
+    ['#cardSel', '#cardSelTicket'].forEach(function (id) {
+      var sel = $(id); if (!sel) return;
+      var placeholder = cashActive
+        ? '<option value="" selected>散单（不记余额）</option>'
+        : '<option value="" disabled>选择储蓄卡</option>';
+      sel.innerHTML = placeholder + cardOpts.join('');
+      var card = activeCard();
+      if (card) sel.value = card.id;
+    });
+    ['#cashBtn', '#cashBtnTicket'].forEach(function (id) {
+      var b = $(id); if (b) b.classList.toggle('active', cashActive);
     });
     var card = activeCard();
     var view = $('#wBalanceView');
@@ -4017,16 +4036,20 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     $('#setCardDiscountBtn').addEventListener('click', setCardDiscount);
     $('#editBalanceBtn').addEventListener('click', editBalance);
     $('#deleteCardBtn').addEventListener('click', deleteCard);
-    function onSegClick(e) {
-      var btn = e.target.closest('[data-card]'); if (!btn) return;
-      state.activeCardId = btn.getAttribute('data-card');
+    function selectCard(id) {
+      state.activeCardId = id;
       var card = activeCard();
       if (card) { state.name = card.name; $('#name').value = card.name; syncDiscountFromCard(card); }
+      else { syncDiscountFromCard(null); }
       renderSlip();
       renderWallet(); save();
     }
-    $('#cardSeg').addEventListener('click', onSegClick);
-    var segTicket = $('#cardSegTicket'); if (segTicket) segTicket.addEventListener('click', onSegClick);
+    ['#cardSel', '#cardSelTicket'].forEach(function (id) {
+      var sel = $(id); if (sel) sel.addEventListener('change', function () { if (sel.value) selectCard(sel.value); });
+    });
+    ['#cashBtn', '#cashBtnTicket'].forEach(function (id) {
+      var b = $(id); if (b) b.addEventListener('click', function () { selectCard(CASH_ID); });
+    });
     $('#exportWalletBtn').addEventListener('click', exportWallet);
     $('#importWalletBtn').addEventListener('click', function () { $('#importWalletFile').click(); });
     $('#importWalletFile').addEventListener('change', function (e) { if (e.target.files && e.target.files[0]) importWallet(e.target.files[0]); e.target.value = ''; });
