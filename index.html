@@ -284,6 +284,21 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
   font-size: 10px; letter-spacing: .06em; text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* 钱包流水 */
+.wallet-ledger{ display:grid; gap:8px; max-height:220px; overflow:auto; }
+.wallet-empty{ font-size:11px; color:var(--ui-ink-2); text-align:center; padding:12px 0; }
+.w-row{ display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--ui-line); border-radius:10px; background:color-mix(in srgb, var(--ui-field) 70%, transparent); }
+.w-l{ flex:1; min-width:0; display:grid; gap:2px; }
+.w-kind{ font-size:10px; letter-spacing:.08em; }
+.w-kind.w-in{ color:#2e9e6b; } .w-kind.w-out{ color:#d98aa0; }
+.w-desc{ font-size:11px; color:var(--ui-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.w-time{ font-family:var(--tk-mono); font-size:9px; color:var(--ui-ink-2); }
+.w-r{ flex:none; text-align:right; display:grid; gap:2px; }
+.w-r b{ font-variant-numeric:tabular-nums; }
+.w-r b.w-in{ color:#2e9e6b; } .w-r b.w-out{ color:var(--ui-ink); }
+.w-r small{ font-size:9px; color:var(--ui-ink-2); }
+.w-acts{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .field-row-inline{ display: flex; align-items: center; gap: 10px; }
 .lock-row{
   display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
@@ -1200,6 +1215,30 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
             <input id="balance" class="control" inputmode="decimal" autocomplete="off">
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title"><span class="dot"></span>钱包<small>WALLET</small></div>
+      <div class="panel-body">
+        <div class="money-row">
+          <span>当前余额</span>
+          <div class="money-wrap"><span class="cur" data-cur>¥</span><b id="wBalanceView" style="padding-left:26px;text-align:right;display:block">0</b></div>
+        </div>
+        <div class="money-row">
+          <span>充值金额</span>
+          <div class="money-wrap"><span class="cur" data-cur>¥</span>
+            <input id="rechargeAmt" class="control" inputmode="decimal" autocomplete="off" placeholder="填写充值金额">
+          </div>
+        </div>
+        <div class="w-acts">
+          <button class="btn btn-ghost" id="rechargeBtn" type="button">确认充值</button>
+          <button class="link-mini" id="exportWalletBtn" type="button">导出备份</button>
+          <button class="link-mini" id="importWalletBtn" type="button">导入备份</button>
+          <input id="importWalletFile" type="file" accept="application/json,.json" hidden>
+        </div>
+        <div class="auto-note"><span>出票自动按实付扣费，余额可为负；流水仅存本机，记得定期导出备份</span></div>
+        <div id="walletLedger" class="wallet-ledger"></div>
       </div>
     </section>
 
@@ -2718,6 +2757,82 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
 
   /* ---------- 提示 ---------- */
   var toastTimer;
+  /* ---------- 钱包：充值 / 扣费 / 流水 / 备份 ---------- */
+  var LEDGER_MAX = 200;
+  function round2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
+  function fmtTime(iso) {
+    var d = new Date(iso); if (isNaN(d)) return iso || '';
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return (d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function trimLedger() {
+    if (state.recharges.length > LEDGER_MAX) state.recharges = state.recharges.slice(-LEDGER_MAX);
+    if (state.consumptions.length > LEDGER_MAX) state.consumptions = state.consumptions.slice(-LEDGER_MAX);
+  }
+  function renderWallet() {
+    var view = $('#wBalanceView');
+    if (view) view.textContent = money(state.wBalance);
+    var box = $('#walletLedger'); if (!box) return;
+    var rows = [];
+    state.recharges.forEach(function (r) { rows.push({ t: r.t, kind: '充值', amt: r.amt, after: r.after, desc: r.note || '充值' }); });
+    state.consumptions.forEach(function (c) { rows.push({ t: c.t, kind: '消费', amt: -num(c.amt), after: c.after, desc: (c.no ? '单号 ' + c.no + ' · ' : '') + (c.desc || '出票') }); });
+    rows.sort(function (a, b) { return String(b.t || '').localeCompare(String(a.t || '')); });
+    if (!rows.length) { box.innerHTML = '<div class="wallet-empty">暂无充值 / 消费记录</div>'; return; }
+    box.innerHTML = rows.slice(0, LEDGER_MAX).map(function (r) {
+      var sign = r.amt >= 0 ? '+' : '-';
+      var cls = r.amt >= 0 ? 'w-in' : 'w-out';
+      return '<div class="w-row"><div class="w-l"><span class="w-kind ' + cls + '">' + esc(r.kind) + '</span>' +
+        '<span class="w-desc">' + esc(r.desc) + '</span><span class="w-time">' + esc(fmtTime(r.t)) + '</span></div>' +
+        '<div class="w-r"><b class="' + cls + '">' + sign + fmt(Math.abs(r.amt)) + '</b><small>余 ' + fmt(r.after) + '</small></div></div>';
+    }).join('');
+  }
+  function doRecharge() {
+    var amt = num($('#rechargeAmt').value);
+    if (!(amt > 0)) { toast('请输入有效充值金额'); return; }
+    state.wBalance = round2(state.wBalance + amt);
+    state.recharges.push({ t: new Date().toISOString(), amt: round2(amt), after: round2(state.wBalance), note: '' });
+    trimLedger();
+    $('#rechargeAmt').value = '';
+    renderWallet(); save();
+    toast('已充值 ' + money(amt));
+  }
+  function chargeOnTicket() {
+    var amt = effPaid();
+    if (!(amt > 0)) return;
+    state.wBalance = round2(state.wBalance - amt);
+    var desc = state.items.map(function (it) { return it.name || it.type || ''; }).filter(Boolean).join('、');
+    if (desc.length > 30) desc = desc.slice(0, 30) + '…';
+    state.consumptions.push({ t: new Date().toISOString(), amt: round2(amt), after: round2(state.wBalance), no: state.no || '', desc: desc || '出票' });
+    trimLedger();
+  }
+  function exportWallet() {
+    var data = { app: 'fish-wallet', version: 1, exportedAt: new Date().toISOString(),
+      wBalance: state.wBalance, recharges: state.recharges, consumptions: state.consumptions };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'wallet-backup-' + toLocalInput(new Date()).replace(/[:T]/g, '-') + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 800);
+    toast('备份已导出');
+  }
+  function importWallet(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var d = JSON.parse(reader.result);
+        if (!d || typeof d !== 'object') throw new Error('bad');
+        var wb = typeof d.wBalance === 'number' && isFinite(d.wBalance) ? d.wBalance : 0;
+        var rc = Array.isArray(d.recharges) ? d.recharges : [];
+        var cs = Array.isArray(d.consumptions) ? d.consumptions : [];
+        if (!confirm('导入将覆盖当前余额与流水，确定继续？')) return;
+        state.wBalance = round2(wb); state.recharges = rc; state.consumptions = cs;
+        trimLedger(); renderWallet(); save(); toast('备份已导入');
+      } catch (e) { toast('备份文件无法识别'); }
+    };
+    reader.readAsText(file);
+  }
+
   function toast(msg) {
     var el = $('#toast');
     el.textContent = msg;
@@ -2750,6 +2865,9 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     if (m.themeName === undefined) m.themeName = '';
     if (m.discount === undefined) m.discount = '100';
     if (m.slogan === undefined) m.slogan = DEFAULTS.slogan;
+    if (typeof m.wBalance !== 'number' || !isFinite(m.wBalance)) m.wBalance = 0;
+    if (!Array.isArray(m.recharges)) m.recharges = [];
+    if (!Array.isArray(m.consumptions)) m.consumptions = [];
     if (DOT_SHAPES.indexOf(m.dotShape) < 0) m.dotShape = 'circle';
     var sc = Number(m.dotScale);
     m.dotScale = (sc >= 0.7 && sc <= 1.6) ? sc : 1;
@@ -2780,6 +2898,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     $('#name').value = state.name;
     $('#tail').value = state.tail;
     $('#slogan').value = state.slogan || '';
+    renderWallet();
     $$('[data-cur]').forEach(function (el) { el.textContent = state.cur; });
     var dotT = $('#dotToggle'); if (dotT) dotT.setAttribute('aria-pressed', String(!!state.dotOn));
   }
@@ -2789,6 +2908,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
   function runPrint() {
     if (printing) return;
     printing = true;
+    chargeOnTicket(); renderWallet(); save();
     var mask = $('#paperMask'), printer = $('#printer'), btn = $('#printBtn');
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     mask.classList.remove('is-fed', 'is-printing', 'is-torn');
@@ -3697,6 +3817,10 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     });
 
     $('#printBtn').addEventListener('click', printWithPosition);
+    $('#rechargeBtn').addEventListener('click', doRecharge);
+    $('#exportWalletBtn').addEventListener('click', exportWallet);
+    $('#importWalletBtn').addEventListener('click', function () { $('#importWalletFile').click(); });
+    $('#importWalletFile').addEventListener('change', function (e) { if (e.target.files && e.target.files[0]) importWallet(e.target.files[0]); e.target.value = ''; });
     $('#saveClose').addEventListener('click', closeSheet);
     $('#saveSheet').addEventListener('click', function (e) { if (e.target && e.target.id === 'saveSheet') closeSheet(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
@@ -3751,6 +3875,9 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     paid: '',
     discount: '100',
     balance: '1000',
+    wBalance: 0,
+    recharges: [],
+    consumptions: [],
     slogan: '按单结清 · 谢绝挂账',
     quote: '今天这份手气，记得带回家',
     name: '小满',
